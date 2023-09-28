@@ -2,3 +2,4 @@ isesEnv
 todo
 .python-version
 __pycache__
+.DS_Store
