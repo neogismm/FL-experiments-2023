@@ -1,0 +1,17 @@
+1. exp 
+    convergence:
+        with different batch size: main.py (4,8,16)
+        with different num of rounds
+
+    with diff averaging algos
+    with random weights / trained weights (for simulating initial global model) for convergence to check for computation complexity
+    metrics: accuracy, precision, recall, Dice score
+
+    paper: 6 pages
+
+    Literature survey 
+
+    Check: android framework for simulating heterogenity
+
+
+heterogenity: RPi, mobile phones
