@@ -12,6 +12,7 @@ import torch.optim as optim  # For all Optimization algorithms, SGD, Adam, etc.
 import torchvision.transforms as transforms  # Transformations we can perform on our dataset
 import torchvision
 from tqdm import tqdm
+from sklearn.metrics import f1_score
 import os
 import pandas as pd
 from PIL import Image
@@ -30,6 +31,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 # Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 # Hyperparameters
 in_channel = 3
 learning_rate = 0.01
@@ -67,15 +69,16 @@ my_transforms = transforms.Compose(
     ]
 )
 
-# train_set = DiabeticCustom(csv_file = '/home/bhabesh/iSES 2023 Paper/Indian Dataset/Disease Grading/Retinopathy Original Images/Train_Set/client2/client2Label/Label.csv', root_dir = '/home/bhabesh/iSES 2023 Paper/Indian Dataset/Disease Grading/Retinopathy Original Images/Train_Set/client2/client2Image' , transform = my_transforms)
-
+# train_set = DiabeticCustom(csv_file = '/home/bhabesh/iSES 2023 Paper/Indian Dataset/Disease Grading/Retinopathy Original Images/Train_Set/client1/client1Label/Label.csv', root_dir = '/home/bhabesh/iSES 2023 Paper/Indian Dataset/Disease Grading/Retinopathy Original Images/Train_Set/client1/client1Image' , transform = my_transforms)
 
 # test_set = DiabeticCustom(csv_file = '/home/bhabesh/iSES 2023 Paper/Indian Dataset/Disease Grading/Groundtruths/TestingLabels.csv', root_dir = '/home/bhabesh/iSES 2023 Paper/Indian Dataset/Disease Grading/Retinopathy Original Images/Test_Set/Test' , transform = my_transforms)
 
 script_name = os.path.basename(__file__)
 client_num = script_name[-4]
 
+# train_set = DiabeticCustom(csv_file = f'../Indian Dataset/Disease Grading/Retinopathy Original Images/Train_Set/client{client_num}/client{client_num}Label/Label.csv', root_dir = '../Indian Dataset/Disease Grading/Retinopathy Original Images/Train_Set/client{client_num}/client{client_num}Image' , transform = my_transforms)
 train_set = DiabeticCustom(csv_file = f'../Indian Dataset/Disease Grading/Retinopathy Original Images/Train_Set/client2/client2Label/Label.csv', root_dir = '../Indian Dataset/Disease Grading/Retinopathy Original Images/Train_Set/client2/client2Image' , transform = my_transforms)
+
 
 test_set = DiabeticCustom(csv_file = '../Indian Dataset/Disease Grading/Groundtruths/TestingLabels.csv', root_dir = '../Indian Dataset/Disease Grading/Retinopathy Original Images/Test_Set/Test' , transform = my_transforms)
 
@@ -129,18 +132,24 @@ def test(net, testloader):
     accuracy = correct / len(testloader.dataset)
     return loss, accuracy
 
+def calculate_f1_score(net, testloader):
+    true_labels = []
+    predicted_labels = []
+
+    with torch.no_grad():
+        for images, labels in tqdm(testloader):
+            outputs = net(images.to(DEVICE))
+            predicted = torch.max(outputs.data, 1)[1].cpu().numpy()
+            true_labels.extend(labels.cpu().numpy())
+            predicted_labels.extend(predicted)
+
+    f1 = f1_score(true_labels, predicted_labels, average='micro')
+    return f1
 
 
-
-
-# #############################################################################
-# 2. Federation of the pipeline with Flower
-# #############################################################################
-
-# Load model and data (simple CNN, CIFAR-10)
 net = model.to(device)
 
-# Define Flower client
+
 class FlowerClient(fl.client.NumPyClient):
     def get_parameters(self, config):
         return [val.cpu().numpy() for _, val in net.state_dict().items()]
@@ -158,7 +167,8 @@ class FlowerClient(fl.client.NumPyClient):
     def evaluate(self, parameters, config):
         self.set_parameters(parameters)
         loss, accuracy = test(net, testloader)
-        return loss, len(testloader.dataset), {"accuracy": accuracy}
+        f1_score = calculate_f1_score(net, testloader)
+        return loss, len(testloader.dataset), {"accuracy": accuracy, "f1 score": f1_score}
 
 
 # Start Flower client

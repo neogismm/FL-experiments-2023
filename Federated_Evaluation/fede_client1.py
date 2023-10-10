@@ -12,6 +12,7 @@ import torch.optim as optim  # For all Optimization algorithms, SGD, Adam, etc.
 import torchvision.transforms as transforms  # Transformations we can perform on our dataset
 import torchvision
 from tqdm import tqdm
+from sklearn.metrics import f1_score
 import os
 import pandas as pd
 from PIL import Image
@@ -130,6 +131,20 @@ def test(net, testloader):
     accuracy = correct / len(testloader.dataset)
     return loss, accuracy
 
+def calculate_f1_score(net, testloader):
+    true_labels = []
+    predicted_labels = []
+
+    with torch.no_grad():
+        for images, labels in tqdm(testloader):
+            outputs = net(images.to(DEVICE))
+            predicted = torch.max(outputs.data, 1)[1].cpu().numpy()
+            true_labels.extend(labels.cpu().numpy())
+            predicted_labels.extend(predicted)
+
+    f1 = f1_score(true_labels, predicted_labels, average='micro')
+    return f1
+
 
 net = model.to(device)
 
@@ -151,7 +166,8 @@ class FlowerClient(fl.client.NumPyClient):
     def evaluate(self, parameters, config):
         self.set_parameters(parameters)
         loss, accuracy = test(net, testloader)
-        return loss, len(testloader.dataset), {"accuracy": accuracy}
+        f1_score = calculate_f1_score(net, testloader)
+        return loss, len(testloader.dataset), {"accuracy": accuracy, "f1 score": f1_score,}
 
 
 # Start Flower client
