@@ -2,6 +2,8 @@ import warnings
 from collections import OrderedDict
 
 import flwr as fl
+from sklearn.metrics import f1_score
+from sklearn.metrics import confusion_matrix
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -75,7 +77,8 @@ my_transforms = transforms.Compose(
 script_name = os.path.basename(__file__)
 client_num = script_name[-1]
 
-train_set = DiabeticCustom(csv_file = f'../Indian Dataset/Disease Grading/Retinopathy Original Images/Train_Set/client{client_num}/client{client_num}Label/Label.csv', root_dir = '../Indian Dataset/Disease Grading/Retinopathy Original Images/Train_Set/client{client_num}/client{client_num}Image' , transform = my_transforms)
+train_set = DiabeticCustom(csv_file = f'../Indian Dataset/Disease Grading/Retinopathy Original Images/Train_Set/client1/client1Label/Label.csv', root_dir = '../Indian Dataset/Disease Grading/Retinopathy Original Images/Train_Set/client1/client1Image' , transform = my_transforms)
+
 
 test_set = DiabeticCustom(csv_file = '../Indian Dataset/Disease Grading/Groundtruths/TestingLabels.csv', root_dir = '../Indian Dataset/Disease Grading/Retinopathy Original Images/Test_Set/Test' , transform = my_transforms)
 
@@ -132,6 +135,35 @@ def test(net, testloader):
 
 net = model.to(device)
 
+def cal_f1_score(net, testloader):
+    true_labels = []
+    predicted_labels = []
+
+    with torch.no_grad():
+        for images, labels in tqdm(testloader):
+            outputs = net(images.to(DEVICE))
+            predicted = torch.max(outputs.data, 1)[1].cpu().numpy()
+            true_labels.extend(labels.cpu().numpy())
+            predicted_labels.extend(predicted)
+
+    f1 = f1_score(true_labels, predicted_labels, average='micro')
+    return f1
+
+
+def cal_confusion_matrix(net, testloader):
+    true_labels = []
+    predicted_labels = []
+
+    with torch.no_grad():
+        for images, labels in testloader:
+            outputs = net(images.to(DEVICE))
+            predicted = torch.max(outputs.data, 1)[1].cpu().numpy()
+            true_labels.extend(labels.cpu().numpy())
+            predicted_labels.extend(predicted)
+
+    cm = confusion_matrix(true_labels, predicted_labels)
+    return cm
+
 
 class FlowerClient(fl.client.NumPyClient):
     def get_parameters(self, config):
@@ -147,10 +179,17 @@ class FlowerClient(fl.client.NumPyClient):
         train(net, trainloader, epochs=1)
         return self.get_parameters(config={}), len(trainloader.dataset), {}
 
+    # def evaluate(self, parameters, config):
+    #     self.set_parameters(parameters)
+    #     loss, accuracy = test(net, testloader)
+    #     return loss, len(testloader.dataset), {"accuracy": accuracy}
+    
     def evaluate(self, parameters, config):
         self.set_parameters(parameters)
         loss, accuracy = test(net, testloader)
-        return loss, len(testloader.dataset), {"accuracy": accuracy}
+        f1 = cal_f1_score(net, testloader)
+        confusion_matrix = cal_confusion_matrix(net, testloader)
+        return loss, len(testloader.dataset), {"accuracy": accuracy, "f1 score": f1, "confusion_matrix": confusion_matrix}
 
 
 # Start Flower client
